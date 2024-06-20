@@ -31,26 +31,26 @@ try:
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
 
     # Fill in the registration form
-    driver.find_element_by_name("username").send_keys(username)
-    driver.find_element_by_name("email").send_keys(email)
-    driver.find_element_by_name("password").send_keys(password)
-    driver.find_element_by_name("date_of_birth").send_keys(date_of_birth)
+    driver.find_element(By.NAME, "username").send_keys(username)
+    driver.find_element(By.NAME, "email").send_keys(email)
+    driver.find_element(By.NAME, "password").send_keys(password)
+    driver.find_element(By.NAME, "date_of_birth").send_keys(date_of_birth)
 
     # Click the register button
-    driver.find_element_by_xpath("//button[@type='submit']").click()
+    driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
     # Wait for the captcha to load
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "captcha")))
 
     # Print the captcha to the terminal
     print("Captcha:")
-    print(driver.find_element_by_id("captcha").get_attribute("src"))
+    print(driver.find_element(By.ID, "captcha").get_attribute("src"))
 
     # Wait for the user to solve the captcha
     input("Enter the captcha solution: ")
 
     # Submit the captcha solution
-    driver.find_element_by_id("captcha-form").submit()
+    driver.find_element(By.ID, "captcha-form").submit()
 
     # Wait for the account creation to complete
     WebDriverWait(driver, 10).until(EC.url_contains("https://discord.com/channels/@me"))
