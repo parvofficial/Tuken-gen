@@ -1,64 +1,56 @@
-import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import discord
+from discord.ext import tasks
+import asyncio
+import os
 import random
+import string
+import pyautogui
 import time
 
-# Set up the email and password
-email = "unverified@email.com"
-password = "PARVSHOP"
+client = discord.Client()
 
-# Set up the random username and date of birth
-username = f"User{random.randint(1000, 9999)}"
-day = random.randint(1, 28)
-month = random.randint(1, 12)
-year = random.randint(1990, 2005)
-date_of_birth = f"{day}/{month}/{year}"
+async def create_account(email, num_accounts):
+    tokens = []
+    for _ in range(num_accounts):
+        username = ''.join(random.choices(string.ascii_uppercase + string.digits, k=9))
+        try:
+            await client.create_dm(email, "PARVSHOP", username, "2005", "9", "27")
+            token = await client.http.get_token()
+            tokens.append(token)
+        except discord.errors.LoginFailure:
+            print("Invalid email or password. Exiting...")
+            return
+        except discord.errors.CaptchaRequired:
+            print("Captcha required. Solving manually...")
+            pyautogui.screenshot('captcha.png', region=(500, 500, 300, 100))  # adjust the region to capture the captcha
+            print("Please solve the captcha and press enter when done...")
+            input()
+            print("Captcha solved. Continuing...")
+    with open("output.txt", "w") as f:
+        for token in tokens:
+            f.write(f"{email}:{token}\n")
+    print(f"Created {num_accounts} accounts with tokens saved to output.txt")
 
-# Set up the Discord API endpoint
-api_endpoint = "https://discord.com/api/v9/auth/register"
+@client.event
+async def on_ready():
+    print("Logged in as {0.user}".format(client))
 
-# Set up the Selenium webdriver
-driver = webdriver.Firefox()  # Replace with your preferred browser
+def main():
+    with open("input.txt", "r") as f:
+        email = f.read().strip()
 
-try:
-    # Open the Discord registration page
-    driver.get("https://discord.com/register")
+    print("1: Create account")
+    print("2: Exit")
+    choice = input("Enter your choice: ")
 
-    # Wait for the registration form to load
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
+    if choice == "1":
+        num_accounts = int(input("How many accounts do you want to create? "))
+        client.loop.create_task(create_account(email, num_accounts))
+        client.run("PARVSHOP")
+    elif choice == "2":
+        print("Exiting...")
+    else:
+        print("Invalid choice. Exiting...")
 
-    # Fill in the registration form
-    driver.find_element(By.NAME, "username").send_keys(username)
-    driver.find_element(By.NAME, "email").send_keys(email)
-    driver.find_element(By.NAME, "password").send_keys(password)
-    driver.find_element(By.NAME, "date_of_birth").send_keys(date_of_birth)
-
-    # Click the register button
-    driver.find_element(By.XPATH, "//button[@type='submit']").click()
-
-    # Wait for the captcha to load
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "captcha")))
-
-    # Print the captcha to the terminal
-    print("Captcha:")
-    print(driver.find_element(By.ID, "captcha").get_attribute("src"))
-
-    # Wait for the user to solve the captcha
-    input("Enter the captcha solution: ")
-
-    # Submit the captcha solution
-    driver.find_element(By.ID, "captcha-form").submit()
-
-    # Wait for the account creation to complete
-    WebDriverWait(driver, 10).until(EC.url_contains("https://discord.com/channels/@me"))
-
-    print("Account created successfully!")
-
-except Exception as e:
-    print(f"Error: {e}")
-
-finally:
-    driver.quit()
+if __name__ == "__main__":
+    main()
