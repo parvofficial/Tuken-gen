@@ -1,71 +1,103 @@
-import os
-import time
-import random
-import string
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from pytesseract import image_to_string
-from PIL import Image
-from io import BytesIO
+import random
+import string
+import json
+import time
 
-def generate_random_username(length=10):
-    """Generate a random username of a given length"""
-    chars = string.ascii_letters + string.digits
-    return ''.join(random.choice(chars) for _ in range(length))
+# Generate a random username
+def generate_random_username(length=8):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-# Set up the webdriver
+# Initialize Chrome with DevTools Protocol enabled
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")
-options.add_argument("--disable-gpu")
-driver = webdriver.Chrome(options=options)
+options.add_argument("--disable-blink-features=AutomationControlled")
+caps = DesiredCapabilities.CHROME
+caps['goog:loggingPrefs'] = {'performance': 'ALL'}
+
+# Update this path to where your ChromeDriver is located
+driver_path = 'C:/Users/<YourUsername>/Downloads/chromedriver.exe'  # Replace with your actual path
+
+driver = webdriver.Chrome(executable_path=driver_path, options=options, desired_capabilities=caps)
 
 # Navigate to the Discord registration page
-driver.get("https://discord.com/register")
+driver.get('https://discord.com/register')
 
-# Fill in the registration form
-username_input = driver.find_element_by_name("username")
-username_input.send_keys(generate_random_username())
-email_input = driver.find_element_by_name("email")
-email_input.send_keys("unverified@email.com")
-password_input = driver.find_element_by_name("password")
-password_input.send_keys("PARVSHOP")
-birth_month_input = driver.find_element_by_name("birth_month")
-birth_month_input.send_keys("1")
-birth_day_input = driver.find_element_by_name("birth_day")
-birth_day_input.send_keys("1")
-birth_year_input = driver.find_element_by_name("birth_year")
-birth_year_input.send_keys("2000")
+# Fill in the email field
+email_field = driver.find_element(By.NAME, 'email')
+email_field.send_keys('unverified@email.com')
 
-# Submit the registration form
-register_button = driver.find_element_by_name("register")
-register_button.click()
+# Fill in the username field
+username_field = driver.find_element(By.NAME, 'username')
+random_username = generate_random_username()
+username_field.send_keys(random_username)
 
-# Wait for the CAPTCHA to appear
+# Fill in the password field
+password_field = driver.find_element(By.NAME, 'password')
+password_field.send_keys('PARVSHOP')
+
+# Fill in the date of birth fields
+dob_month = driver.find_element(By.NAME, 'dateOfBirth.month')
+dob_month.send_keys('September')
+
+dob_day = driver.find_element(By.NAME, 'dateOfBirth.day')
+dob_day.send_keys('27')
+
+dob_year = driver.find_element(By.NAME, 'dateOfBirth.year')
+dob_year.send_keys('2000')
+
+# Click the "Continue" button
+continue_button = driver.find_element(By.XPATH, '//button[@type="submit" and contains(@class, "button-38aScr")]')
+continue_button.click()
+
+# Wait for CAPTCHA to appear (if present)
 try:
-    captcha_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, "//div[@data-test-selector='captcha']"))
+    # Wait until the CAPTCHA iframe is present
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, '//iframe[contains(@src, "https://www.google.com/recaptcha/")]'))
     )
-    print("CAPTCHA detected. Solving...")
-    # Solve the CAPTCHA using pytesseract
-    captcha_image = captcha_element.screenshot_as_png
-    captcha_text = image_to_string(Image.open(BytesIO(captcha_image)))
-    print(f"CAPTCHA solution: {captcha_text}")
-    # Enter the CAPTCHA solution
-    captcha_input = driver.find_element_by_name("captcha")
-    captcha_input.send_keys(captcha_text)
+    print("CAPTCHA detected. Please solve it.")
+    
+    # Wait for the CAPTCHA to be solved
+    WebDriverWait(driver, 300).until_not(
+        EC.presence_of_element_located((By.XPATH, '//iframe[contains(@src, "https://www.google.com/recaptcha/")]'))
+    )
+    print("CAPTCHA solved, proceeding with registration.")
 except:
-    print("No CAPTCHA detected. Continuing with registration.")
+    print("No CAPTCHA detected or CAPTCHA solving timeout.")
 
-# Wait for the account to be created
-WebDriverWait(driver, 10).until(EC.title_contains("Discord"))
+# Wait for the registration to complete and capture the network traffic
+time.sleep(5)
 
-# Get the token from the page
-token = driver.execute_script("return localStorage.token")
+# Retrieve the network logs
+logs = driver.get_log('performance')
+
+# Find the request that contains the token
+token = None
+for log in logs:
+    log_data = json.loads(log['message'])
+    message = log_data['message']
+    if 'Network.responseReceived' in message['method']:
+        response = message['params']['response']
+        if 'https://discord.com/api/v9/auth/login' in response['url']:
+            request_id = message['params']['requestId']
+            body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
+            data = json.loads(body['body'])
+            if 'token' in data:
+                token = data['token']
+                print(f"Retrieved token: {token}")
+                break
 
 # Save the token to a file
-with open("token.txt", "w") as f:
-    f.write(token)
+if token:
+    with open('token.txt', 'w') as file:
+        file.write(token)
+    print("Token saved to token.txt")
+else:
+    print("Token not found.")
 
-print("Account created successfully! Token saved to token.txt")
+# Close the driver
+driver.quit()
