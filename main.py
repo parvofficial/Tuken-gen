@@ -1,103 +1,118 @@
+import os
+import random
+import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import random
-import string
-import json
-import time
+from selenium.webdriver.common.proxy import Proxy, ProxyType
+from captcha_solver import CaptchaSolver
+
+# Set up Captcha solver API key
+captcha_solver_api_key = "aee594e21340567ba0da575e6af5f104"
+
+# Load proxies from proxies.txt
+proxies = []
+with open("proxies.txt", "r") as f:
+    for line in f:
+        proxies.append(f"http://{line.strip()}")
+
+# Set up Discord registration page URL
+discord_registration_url = "https://discord.com/register"
+
+# Set up mail and password for initial registration
+initial_mail = "testing120809@outlook.com"
+initial_password = "PARVSHOP"
+
+# Set up birth date details
+birth_date = 27
+birth_month = "September"
+birth_year = 2000
+
+# Set up display name
+display_name = "PARV_TOKENS"
 
 # Generate a random username
-def generate_random_username(length=8):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+def generate_username():
+    username = ""
+    for i in range(12):
+        username += random.choice("abcdefghijklmnopqrstuvwxyz1234567890")
+    return username
 
-# Initialize Chrome with DevTools Protocol enabled
-options = webdriver.ChromeOptions()
-options.add_argument("--disable-blink-features=AutomationControlled")
-caps = DesiredCapabilities.CHROME
-caps['goog:loggingPrefs'] = {'performance': 'ALL'}
+# Create a new instance of the Chrome driver with proxy support
+def create_driver(proxy):
+    proxy_obj = Proxy()
+    proxy_obj.proxy_type = ProxyType.MANUAL
+    proxy_obj.http_proxy = proxy
+    proxy_obj.ssl_proxy = proxy
+    capabilities = webdriver.DesiredCapabilities.CHROME
+    proxy_obj.add_to_capabilities(capabilities)
+    driver = webdriver.Chrome(desired_capabilities=capabilities)
+    return driver
 
-# Update this path to where your ChromeDriver is located
-driver_path = 'C:/Users/<YourUsername>/Downloads/chromedriver.exe'  # Replace with your actual path
+# Solve Captcha using Captcha solver API
+def solve_captcha(driver):
+    captcha_solver = CaptchaSolver(captcha_solver_api_key)
+    captcha_img = driver.find_element_by_css_selector("img[src*='captcha']")
+    captcha_img_url = captcha_img.get_attribute("src")
+    captcha_solution = captcha_solver.solve_captcha(captcha_img_url)
+    return captcha_solution
 
-driver = webdriver.Chrome(executable_path=driver_path, options=options, desired_capabilities=caps)
+# Register a new Discord account and get the token
+def register_account(proxy):
+    driver = create_driver(proxy)
+    driver.get(discord_registration_url)
+    time.sleep(2)  # Wait for page to load
 
-# Navigate to the Discord registration page
-driver.get('https://discord.com/register')
+    # Generate a random username
+    username = generate_username()
 
-# Fill in the email field
-email_field = driver.find_element(By.NAME, 'email')
-email_field.send_keys('unverified@email.com')
+    # Fill in registration form
+    email_input = driver.find_element_by_name("email")
+    email_input.send_keys(initial_mail)
+    display_name_input = driver.find_element_by_name("username")
+    display_name_input.send_keys(display_name)
+    username_input = driver.find_element_by_name("username")
+    username_input.send_keys(username)
+    password_input = driver.find_element_by_name("password")
+    password_input.send_keys(initial_password)
+    birth_date_input = driver.find_element_by_name("birthdate")
+    birth_date_input.send_keys(f"{birth_date} {birth_month} {birth_year}")
 
-# Fill in the username field
-username_field = driver.find_element(By.NAME, 'username')
-random_username = generate_random_username()
-username_field.send_keys(random_username)
+    # Solve Captcha
+    captcha_solution = solve_captcha(driver)
+    captcha_input = driver.find_element_by_name("captcha")
+    captcha_input.send_keys(captcha_solution)
 
-# Fill in the password field
-password_field = driver.find_element(By.NAME, 'password')
-password_field.send_keys('PARVSHOP')
+    # Click on "Continue" button
+    continue_button = driver.find_element_by_css_selector("button[type='submit']")
+    continue_button.click()
+    time.sleep(5)  # Wait for registration to complete
 
-# Fill in the date of birth fields
-dob_month = driver.find_element(By.NAME, 'dateOfBirth.month')
-dob_month.send_keys('September')
+    # Get the token from the cookies
+    token = driver.execute_script("return document.cookie.match(/__dcfduid=([^;]*)/)[1];")
 
-dob_day = driver.find_element(By.NAME, 'dateOfBirth.day')
-dob_day.send_keys('27')
+    # Check if account was created successfully
+    try:
+        account_created_text = driver.find_element_by_css_selector("div[class*='account-created']").text
+        if "Account created successfully!" in account_created_text:
+            print("Account created successfully!")
+            return token
+    except:
+        print("Failed to create account")
+        return None
 
-dob_year = driver.find_element(By.NAME, 'dateOfBirth.year')
-dob_year.send_keys('2000')
+    driver.quit()
 
-# Click the "Continue" button
-continue_button = driver.find_element(By.XPATH, '//button[@type="submit" and contains(@class, "button-38aScr")]')
-continue_button.click()
+# Ask user how many accounts to create
+num_accounts = int(input("How many accounts do you want to create? "))
 
-# Wait for CAPTCHA to appear (if present)
-try:
-    # Wait until the CAPTCHA iframe is present
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '//iframe[contains(@src, "https://www.google.com/recaptcha/")]'))
-    )
-    print("CAPTCHA detected. Please solve it.")
-    
-    # Wait for the CAPTCHA to be solved
-    WebDriverWait(driver, 300).until_not(
-        EC.presence_of_element_located((By.XPATH, '//iframe[contains(@src, "https://www.google.com/recaptcha/")]'))
-    )
-    print("CAPTCHA solved, proceeding with registration.")
-except:
-    print("No CAPTCHA detected or CAPTCHA solving timeout.")
-
-# Wait for the registration to complete and capture the network traffic
-time.sleep(5)
-
-# Retrieve the network logs
-logs = driver.get_log('performance')
-
-# Find the request that contains the token
-token = None
-for log in logs:
-    log_data = json.loads(log['message'])
-    message = log_data['message']
-    if 'Network.responseReceived' in message['method']:
-        response = message['params']['response']
-        if 'https://discord.com/api/v9/auth/login' in response['url']:
-            request_id = message['params']['requestId']
-            body = driver.execute_cdp_cmd('Network.getResponseBody', {'requestId': request_id})
-            data = json.loads(body['body'])
-            if 'token' in data:
-                token = data['token']
-                print(f"Retrieved token: {token}")
-                break
-
-# Save the token to a file
-if token:
-    with open('token.txt', 'w') as file:
-        file.write(token)
-    print("Token saved to token.txt")
-else:
-    print("Token not found.")
-
-# Close the driver
-driver.quit()
+# Create accounts
+with open("tokens.txt", "a") as f:
+    for i in range(num_accounts):
+        proxy = random.choice(proxies)
+        token = register_account(proxy)
+        if token:
+            f.write(token + "\n")
+            print(f"Account {i+1} created successfully! Token saved to tokens.txt")
+        time.sleep(10)  # Wait 10 seconds before trying again
